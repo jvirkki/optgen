@@ -98,11 +98,18 @@ class OneOption
   end
 
   def to_s
+    line = @name
     if (@shortarg != nil)
-      "(-#{@shortarg},--#{@longarg}) #{@description}"
+      line = line + " (-#{@shortarg},--#{@longarg})"
     else
-      "(--#{@longarg}) #{@description}"
+      line = line + " (--#{@longarg})"
     end
+    if (@paramlist != nil)
+      @paramlist.each { |name|
+        line = line + " #{name}"
+      }
+    end
+    line = line +  " : #{@description}"
   end
 
 end
@@ -161,6 +168,7 @@ class OptGen
     @configfile = optgenfile
     @commands = Array.new()
     @options = Hash.new()
+    @options_array = Array.new()
     @include = Array.new()
     @longest_command = 0
     @allargs = Hash.new()
@@ -202,7 +210,10 @@ class OptGen
       else
         o = OneOption.new(line, vars)
         command.addopt(o)
-        @options[o.name] = o
+        if (@options[o.name] == nil)
+          @options[o.name] = o
+          @options_array.push(o.name)
+        end
 
         if (o.shortarg != nil)
           prev = @allargs[o.shortarg]
@@ -268,13 +279,12 @@ ENDHEADER
 
     # Define constants OPT_* for each known option
     n = 0
-    optarr = @options.keys
     o.puts "#define COUNT_OPTIONS #{@options.size}"
-    optarr.each { |i|
+    @options_array.each { |i|
       op = @options[i]
       o.puts
       sa = "-#{op.shortarg} " if (op.shortarg)
-      o.puts "// #{op.name} #{op.paramlist}: (#{sa}--#{op.longarg})  #{op.description}"
+      o.puts "// #{op.to_s}"
       o.puts "#define OPT_#{op.name} #{n}"
       n = n + 1
       }
@@ -412,7 +422,7 @@ ENDHEADER
 
     # Define the options allowed by each command
     o.puts '// For each option, list the commands which accept it'
-    optarr.each { |optname|
+    @options_array.each { |optname|
 
       o.print "int option_#{optname}[] = {"
       c = 1
@@ -482,7 +492,7 @@ ENDHEADER
     o.puts
 
     n = 0
-    optarr.each { |i|
+    @options_array.each { |i|
       op = @options[i]
       sa = nil
       sa = "-#{op.shortarg}" if (op.shortarg)
@@ -530,8 +540,8 @@ ENDHEADER
       end
 
       if (@strict_options)
-        o.puts "      // strict_options: is #{optarr[n]} allowed?"
-        name = optarr[n]
+        o.puts "      // strict_options: is #{@options_array[n]} allowed?"
+        name = @options_array[n]
 
         o.puts '      int ok = 0;'
         o.puts '      unsigned int cc;'
