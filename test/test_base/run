@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+
+#
+#  Copyright 2015 Jyri J. Virkki <jyri@virkki.com>
+#
+#  This file is part of optgen.
+#
+#  optgen is free software: you can redistribute it and/or modify it
+#  under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+#
+#  optgen is distributed in the hope that it will be useful, but
+#  WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with optgen.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+set -e
+
+TESTDIR=`basename \`pwd\``
+
+check_out () {
+    OUT=`cat out`
+    if [ "$OUT" != "$1" ]; then
+        echo "FAIL: [$TESTDIR] $2"
+        echo "expected: $1"
+        echo "saw: $OUT"
+        exit 1
+    else
+        echo "OK: [$TESTDIR] $2"
+    fi
+}
+
+rm -f optgen.c optgen.h main out
+
+../../optgen base.conf
+cc main.c optgen.c -o main
+
+# test: run app with no args
+./main > out
+check_out 'no args' 'no args'
+
+# test: run app with no command, one global option
+./main -x > out
+check_out 'no command:experimental' 'no command, global option'
+
+# test: run app with unknown arg
+set +e
+./main --badarg > out
+set -e
+check_out 'error: unknown argument: [--badarg]' 'unknown arg'
+
+# test: command with one optional arg, no arg given
+./main info > out
+check_out 'info' 'info'
+
+# test: command with one optional arg, short arg given
+./main info -i > out
+check_out 'info:info' 'info -i'
+
+# test: command with one optional arg, long arg given
+./main info --info > out
+check_out 'info:info' 'info --info'
+
+# test: command with one optional arg with a value, short arg given
+./main help -h 2 > out
+check_out 'help:2' 'help -h 2'
+
+# test: command with one optional arg with a value, long arg given
+./main help --help 2 > out
+check_out 'help:2' 'help --help 2'
+
+# test: command with one optional arg with a value, no value given
+set +e
+./main help --help > out
+set -e
+check_out 'error: no value for arg --help' 'help --help with no value'
+
+# test: command with arg that takes no value, repeated thrice
+./main two --two --two --two > out
+check_out 'two:two:3' 'main two --two --two --two'
+
+# test: command with option callback called multiple times
+./main two -l 1 -l 2 --level three > out
+check_out 'two:level:;1;2;three' 'main two -l 1 -l 2 --level three'
+
+# test: command with option taking a CHAR, proper value given
+./main two --letter x > out
+check_out 'two:letter:x' 'main two --letter x'
+
+# test: command with option taking a CHAR, bad value given
+set +e
+./main two --letter xyz > out
+set -e
+check_out 'error: --letter must be a single character' 'main two --letter xyz'
+
+# test: command with option taking an ABSPATH, proper value given
+./main two --path /tmp > out
+check_out 'two:path:/tmp' 'main two --path /tmp'
+
+# test: command with option taking an ABSPATH, bad value given
+set +e
+./main two --path tmp > out
+set -e
+check_out 'error: --path must be an absolute path' 'main two --path tmp'
+
+rm -f optgen.c optgen.h main out
+

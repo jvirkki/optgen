@@ -1,2 +1,0 @@
-# optgen
-Option parser generator

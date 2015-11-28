@@ -1,0 +1,83 @@
+#!/usr/bin/env perl
+
+#
+#  Copyright 2015 Jyri J. Virkki <jyri@virkki.com>
+#
+#  This file is part of optgen.
+#
+#  optgen is free software: you can redistribute it and/or modify it
+#  under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+#
+#  optgen is distributed in the hope that it will be useful, but
+#  WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with optgen.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+$CMD = '../../optgen';
+$HERE = `basename \`pwd\``;
+chomp($HERE);
+
+
+# All tests in this directory are expected to error out and not produce an
+# output file. Success is measured by:
+# 1. stdout output contains 'error:' line
+# 2. exit code is 1
+# 3. no output files generated
+
+unlink 'optgen.h';
+unlink 'optgen.c';
+
+@tests = `ls -1`;
+
+$exitval = 0;
+
+foreach (@tests) {
+    chomp;
+    next if ($_ eq 'run');
+
+    unlink 'optgen.h';
+    unlink 'optgen.c';
+
+    $name = $_;
+    $desc = `head -1 $_`;
+    chomp($desc);
+    $desc = substr($desc, 2);
+
+    open(T, "$CMD $_ |");
+    $found_error = 0;
+    while (<T>) {
+        if (/^error:/) {
+            $found_error = 1;
+        }
+    }
+    close(T);
+    $rv = ${^CHILD_ERROR_NATIVE};
+
+    if (-e 'optgen.c' || -e 'optgen.h') {
+        print "FAIL: [$HERE/$name]: generated unexpected output file: $desc\n";
+        $exitval = 1;
+        next;
+    }
+
+    if (!$found_error) {
+        print "FAIL: [$HERE/$name]: no error line:  $desc\n";
+        $exitval = 1;
+        next;
+    }
+
+    if ($rv != 256) {
+        print "FAIL: [$HERE/$name]: bad exit code:  $desc\n";
+        $exitval = 1;
+        next;
+    }
+
+    print "OK: [$HERE/$name]: $desc\n";
+}
+
+exit($exitval);

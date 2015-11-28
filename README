@@ -1,0 +1,114 @@
+
+Overview
+========
+optgen generates a command line option parser function based on a
+minimal configuration file.
+
+I find that option parsing routines such as getopt(1) are cumbersome
+and don't save that much work. optgen takes a slightly different
+approach. It generates a parser function based on a config file.
+
+
+Running optgen
+--------------
+Just pass it the name of the config file:
+
+% optgen options.conf
+
+On success, it will generate optgen.c and optgen.h
+
+(NOTE: Currently it generates an option parser for C code only but I plan
+on extending it to other languages when I need it.)
+
+Calling the parser
+------------------
+The application code needs to call the optgen_parse function.
+Refer to the generated optgen.h for documentation on how to call it.
+
+
+Config file syntax
+==================
+Blank lines and lines starting with # are ignored.
+
+Directives
+----------
+Directives start with a . (dot) character.
+
+Directives are optional, they configure the behavior of the option
+parser. The following directives are supported at this time:
+
+  .strict_options : Options are only accepted if declared for the given
+                    command or if they are GLOBAL options. By default
+                    all options are accepted.
+
+  .require_command : The first argument must be a known command.
+
+Definitions
+-----------
+Definitions are lines starting with LABEL= (for any value of LABEL)
+
+If $$$LABEL$$$ is used elsewhere, it will be expanded to the value set
+in the definition.
+
+This is useful for options which are reused in multiple commands.
+
+Commands
+--------
+Commands are defined in brackets followed by description. A command
+begins a section of options for that command until the next command line
+is seen.
+
+Example:
+[command] This command does some work
+
+The exception is the reserved name GLOBAL. This section (if present) defines
+options which are not specific to any command.
+
+Options
+-------
+Options for a command are listed after the command line.
+Syntax for each options line is:
+
+FLAGS:SHORT,LONG:PARAM:CALLBACK:DESCRIPTION
+
+FLAGS:
+  O: Optional
+
+SHORT: An optional single letter form of this option.
+LONG: Long form of this option. Required.
+
+PARAMS: Optional placeholder to name the value of this option.
+  This is primarily only for documentation but a few types trigger special handling:
+    ABSPATH : Must be an absolute path starting with a slash
+    CHAR : Must be a single character
+
+CALLBACK: Optional callback function invoked each time this option is seen.
+
+DESCRIPTION: Documentation for this option.
+
+Examples:
+
+Option with both short and long forms, no params or callback:
+O:h,help:::Show usage help
+
+Option with both short and long forms and takes one value (N):
+O:l,level:N::Set the level.
+
+Option with long form only:
+O:,help:::Show usage help
+
+Option with a callback:
+O:l,level:N:set_level:Set the level.
+
+Callbacks
+---------
+If a callback is defined, optgen will insert a call to the function
+named in the config each time this option is seen. The function must
+have the following prototype:
+
+int callback_name(char * arg, int command)
+  arg: the value of the option (or NULL for options taking no value)
+  command: the command seen (or OPTGEN_NO_COMMAND)
+
+The callback must return one of these values:
+OPTGEN_CALLBACK_OK or OPTGEN_CALLBACK_FAIL

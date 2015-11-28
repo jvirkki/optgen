@@ -1,0 +1,86 @@
+#!/usr/bin/env perl
+
+#
+#  Copyright 2015 Jyri J. Virkki <jyri@virkki.com>
+#
+#  This file is part of optgen.
+#
+#  optgen is free software: you can redistribute it and/or modify it
+#  under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+#
+#  optgen is distributed in the hope that it will be useful, but
+#  WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with optgen.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+$CMD = '../../optgen';
+$HERE = `basename \`pwd\``;
+chomp($HERE);
+
+
+# These are test of valid config files which should produce output files.
+# These do not test the validity of the output, simply that the config file
+# is processed with no error. Success is measured by:
+# 1. exit code is 0
+# 3. output files generated
+
+unlink 'optgen.h';
+unlink 'optgen.c';
+
+@tests = `ls -1`;
+
+$exitval = 0;
+
+foreach (@tests) {
+    chomp;
+    next if ($_ eq 'run');
+
+    unlink 'optgen.h';
+    unlink 'optgen.c';
+
+    $name = $_;
+    $desc = `head -1 $_`;
+    chomp($desc);
+    $desc = substr($desc, 2);
+
+    open(T, "$CMD $_ |");
+    $found_error = 0;
+    while (<T>) {
+        if (/^error:/) {
+            $found_error = 1;
+        }
+    }
+    close(T);
+    $rv = ${^CHILD_ERROR_NATIVE};
+
+    if ((! -e 'optgen.c') || (! -e 'optgen.h')) {
+        print "FAIL: [$HERE/$name]: output files not generated: $desc\n";
+        $exitval = 1;
+        next;
+    }
+
+    if ($found_error) {
+        print "FAIL: [$HERE/$name]: error line seen:  $desc\n";
+        $exitval = 1;
+        next;
+    }
+
+    if ($rv != 0) {
+        print "FAIL: [$HERE/$name]: bad exit code:  $desc\n";
+        $exitval = 1;
+        next;
+    }
+
+    print "OK: [$HERE/$name]: $desc\n";
+}
+
+unlink 'optgen.h';
+unlink 'optgen.c';
+
+exit($exitval);

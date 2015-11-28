@@ -1,0 +1,4 @@
+# repeated arg ok if same short and long
+[help] show help
+O:h,help:::show help
+O:h,help:::show help

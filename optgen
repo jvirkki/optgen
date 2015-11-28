@@ -1,0 +1,673 @@
+#!/usr/bin/env ruby
+
+#
+#  Copyright 2015 Jyri J. Virkki <jyri@virkki.com>
+#
+#  This file is part of optgen.
+#
+#  optgen is free software: you can redistribute it and/or modify it
+#  under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+#
+#  optgen is distributed in the hope that it will be useful, but
+#  WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#  General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with optgen.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+$VERSION = '0.2'
+
+
+#-----------------------------------------------------------------------------
+# Represents one option as read from the config file.
+#
+class OneOption
+
+  # is true if this option is required
+  attr_reader :required
+
+  # the name of this option (normalized from longarg)
+  attr_reader :name
+
+  # single-character form of this option (may be nil, is not required)
+  attr_reader :shortarg
+
+  # long form of this option (required, always present)
+  attr_reader :longarg
+
+  # parameter list needed by this option
+  attr_reader :paramlist
+
+  # callback function to call when this option processed
+  attr_reader :callback
+
+  # human readable documentation as provided in config file
+  attr_reader :description
+
+
+  #---------------------------------------------------------------------------
+  # Parse option line from config to create self.
+  #
+  def initialize(line, vars)
+
+    # First perform variable expansion
+    if (line =~ /\$\$\$(\w+)\$\$\$/)
+      name = $1
+      value = vars[name]
+      if (!value)
+        puts "error: #{name} undefined"
+        exit(1)
+      end
+
+      line.sub!(/\$\$\$#{name}\$\$\$/, value)
+    end
+
+    line =~ /(.):(.*):(.*):(.*):(.*)/;
+    @required = ($1 == "R")
+    arglist = $2
+    params = $3
+    @callback = $4
+    @description = $5
+
+    (@shortarg, @longarg) = arglist.split(',') if (arglist)
+    @shortarg = nil if (@shortarg == "")
+
+    if (@longarg == nil || @longarg == "")
+      puts "error: long arg name always required"
+      exit(1)
+    end
+
+    @paramlist = nil
+    @paramlist = params.split(',') if (params.length > 0)
+    @name = @longarg.gsub(/-/, '_')
+  end
+
+  def display_len
+    len = 2 + @longarg.length
+    len = len + 2 + @shortarg.length if (@shortarg != nil)
+    if (@paramlist)
+      @paramlist.each { |value|
+        len = len + value.length + 1
+      }
+    end
+    len
+  end
+
+  def to_s
+    if (@shortarg != nil)
+      "(-#{@shortarg},--#{@longarg}) #{@description}"
+    else
+      "(--#{@longarg}) #{@description}"
+    end
+  end
+
+end
+
+
+#-----------------------------------------------------------------------------
+# Represents one command.
+#
+class Command
+
+  # name of the command as given in the config file
+  attr_reader :name
+
+  # human readable description as given in the config file
+  attr_reader :description
+
+  # array of OneOption objects for each option allowed by this command
+  attr_reader :options
+
+  # string length of longest option this command supports
+  attr_reader :longest_option
+
+  #---------------------------------------------------------------------------
+  # Parse command line from config to create self.
+  #
+  def initialize(line, vars)
+    line =~ /\[([^\]]+)\](.*)/
+    @name = $1.strip
+    @description = $2.strip if ($2)
+    @options = Array.new()
+    @longest_option = 0
+  end
+
+  #---------------------------------------------------------------------------
+  # Add the given option (OneOption obj) to my set of allowed options
+  def addopt(option)
+    @options.push(option)
+    if (option.display_len() > @longest_option)
+      @longest_option = option.display_len()
+    end
+  end
+
+end
+
+
+#-----------------------------------------------------------------------------
+# Represents the full optgen configuration for a given config file.
+#
+class OptGen
+
+  #---------------------------------------------------------------------------
+  # Parse an optgen config file.
+  #
+  def initialize(optgenfile)
+
+    @configfile = optgenfile
+    @commands = Array.new()
+    @options = Hash.new()
+    @include = Array.new()
+    @longest_command = 0
+    @allargs = Hash.new()
+
+    command = nil
+    vars = Hash.new()
+    saw_global = false
+
+    fin = File.open(optgenfile)
+    fin.each_line { |line|
+      line.chomp!
+      line.strip!
+      next if (line == "")
+      # depending on the ruby version, char from string may return a char or an int... sigh...
+      next if (line[0] == '#' || line[0] == 35)
+
+      if (line[0] == '[' || line[0] == 91)
+        if (saw_global)
+          puts "error: GLOBAL section must be last"
+          exit(1)
+        end
+        command = Command.new(line, vars)
+        @commands.push(command)
+        if (command.name.length > @longest_command)
+          @longest_command = command.name.length
+        end
+        if (command.name == "GLOBAL")
+          saw_global = true
+        end
+
+      elsif (line =~ /(\w+)=(.+)/)
+        name = $1
+        value = $2
+        vars[name] = value
+
+      elsif (line[0] == "." || line[0] == 46)
+        directive(line)
+
+      else
+        o = OneOption.new(line, vars)
+        command.addopt(o)
+        @options[o.name] = o
+
+        if (o.shortarg != nil)
+          prev = @allargs[o.shortarg]
+          if (prev != nil && prev.longarg != o.longarg)
+            puts "error: mismatch: [#{o}] : [#{prev}]"
+            exit(1)
+          end
+          @allargs[o.shortarg] = o
+        end
+
+        prev = @allargs[o.longarg]
+        if (prev != nil && prev.shortarg != o.shortarg)
+          puts "error: mismatch: [#{o}] : [#{prev}]"
+          exit(1)
+        end
+        @allargs[o.longarg] = o
+      end
+    }
+  end
+
+  #---------------------------------------------------------------------------
+  # Handle per-config directives (lines starting with a dot in config file)
+  #
+  def directive(line)
+
+    @require_command = true if (line == ".require_command")
+    @strict_options = true if (line == ".strict_options")
+
+    if (line =~ /\.include (.*)/)
+      @include.push($1)
+    end
+
+  end
+
+  #---------------------------------------------------------------------------
+  # Create optgen handling functions for C code.
+  #
+  def gen_C
+
+    header = <<-ENDHEADER
+
+/*
+ * DO NOT EDIT THIS FILE BY HAND!
+ *
+ * All changes will be lost when file gets regenerated.
+ *
+ * Generated by optgen #{$VERSION} from config file "#{@configfile}"
+ *
+ */
+
+ENDHEADER
+
+    #----- Generate header file optgen.h -----
+
+    o = File.open("optgen.h", 'w')
+
+    o.puts(header)
+    o.puts "#ifndef OPTGEN_H"
+    o.puts "#define OPTGEN_H"
+    o.puts
+    o.puts "#include <stdlib.h>"
+    o.puts
+
+    # Define constants OPT_* for each known option
+    n = 0
+    optarr = @options.keys
+    o.puts "#define COUNT_OPTIONS #{@options.size}"
+    optarr.each { |i|
+      op = @options[i]
+      o.puts
+      sa = "-#{op.shortarg} " if (op.shortarg)
+      o.puts "// #{op.name} #{op.paramlist}: (#{sa}--#{op.longarg})  #{op.description}"
+      o.puts "#define OPT_#{op.name} #{n}"
+      n = n + 1
+      }
+
+    # Define constants COMMAND_* for each known command
+    n = 1
+    global = nil
+    @commands.each { |command|
+      if (command.name == "GLOBAL")
+        global = command
+      end
+
+      o.puts
+      o.puts "// #{command.name}: #{command.description}"
+      o.puts "#define COMMAND_#{command.name} #{n}"
+      n = n + 1
+    }
+
+    # Function prototypes
+    o.puts
+    o.puts '/**'
+    o.puts ' * Function to parse the arguments.'
+    o.puts ' *'
+    o.puts ' * Parameters:'
+    o.puts ' *   argc    - argv size (as passed to main)'
+    o.puts ' *   argv    - Arguments (as passed to main)'
+    o.puts ' *   command - Command (if present) will be stored here'
+    o.puts ' *   options - Caller-allocated array where option values will be stored'
+    o.puts ' *'
+    o.puts ' * Return:'
+    o.puts ' *   OPTGEN_OK on success'
+    o.puts ' *   OPTGEN_NONE if no arguments seen'
+    o.puts ' *   command will be set to OPTGEN_NO_COMMAND if no command given, or'
+    o.puts ' *     one of the COMMAND_* constants above.'
+    o.puts ' *   options array has an entry for each OPT_* index for each known option.'
+    o.puts ' *     The value of each OPT_* entry is one of:'
+    o.puts ' *       NULL if the option was not seen'
+    o.puts ' *       string value if the option had a value'
+    o.puts ' *       for options with no value, a string value of an integer'
+    o.puts ' *'
+    o.puts ' * Sample call:'
+    o.puts ' *'
+    o.puts ' *   char * options[COUNT_OPTIONS];'
+    o.puts ' *   int command;'
+    o.puts ' *'
+    o.puts ' *   int rv = optgen_parse(argc, argv, &command, options);'
+    o.puts ' *'
+    o.puts ' */'
+    o.puts 'int optgen_parse(int argc, char * argv[], int * command, char * options[]);'
+    o.puts '#define OPTGEN_OK 0'
+    o.puts '#define OPTGEN_NONE 1'
+    o.puts '#define OPTGEN_NO_COMMAND -1'
+    o.puts
+
+    o.puts '/**'
+    o.puts ' * Convenience function to get count of times an option was specified.'
+    o.puts ' * For options which take NO arguments but can be repeated multiple times,'
+    o.puts ' * this function returns the number of times it was seen'
+    o.puts ' *'
+    o.puts ' * Parameters:'
+    o.puts ' *   str - A value from options array'
+    o.puts ' *'
+    o.puts ' * Return:'
+    o.puts ' *'
+    o.puts ' *   Number of times an option was seen, or zero if none'
+    o.puts ' *'
+    o.puts ' */'
+    o.puts 'int opt_count(char * str);'
+    o.puts
+
+    o.puts '/**'
+    o.puts ' * Convenience function to return integer value of an option'
+    o.puts ' *'
+    o.puts ' * Parameters:'
+    o.puts ' *   str - A value from options array'
+    o.puts ' *   def - Default value if none given'
+    o.puts ' *'
+    o.puts ' * Return:'
+    o.puts ' *'
+    o.puts ' *   Value of option as integer. If NULL, returns default def.'
+    o.puts ' *'
+    o.puts ' */'
+    o.puts 'int opt_int(char * str, int def);'
+    o.puts
+
+    o.puts '/**'
+    o.puts ' * Convenience function to single char value of an option'
+    o.puts ' *'
+    o.puts ' * Parameters:'
+    o.puts ' *   str - A value from options array'
+    o.puts ' *   def - Default value if none given'
+    o.puts ' *'
+    o.puts ' * Return:'
+    o.puts ' *'
+    o.puts ' *   Value of option as char. If NULL, returns default def.'
+    o.puts ' *'
+    o.puts ' */'
+    o.puts 'char opt_char(char * str, char def);'
+    o.puts
+
+    o.puts '/**'
+    o.puts ' * Show help based on command and option descriptions.'
+    o.puts ' *'
+    o.puts ' */'
+    o.puts 'void opt_show_help();'
+    o.puts
+
+    o.puts '// Callbacks need to return one of these values'
+    o.puts '#define OPTGEN_CALLBACK_OK 0'
+    o.puts '#define OPTGEN_CALLBACK_FAIL 1'
+    o.puts
+
+    o.puts "#endif"
+    o.close()
+
+    #----- Generate code file optgen.c -----
+
+    o = File.open("optgen.c", 'w')
+
+    o.puts header
+    o.puts '#include <stdlib.h>'
+    o.puts '#include <stdio.h>'
+    o.puts '#include <string.h>'
+    o.puts '#include <sys/ioctl.h>'
+    o.puts '#include <stdio.h>'
+    o.puts '#include <unistd.h>'
+    o.puts '#include "optgen.h"'
+    @include.each { |inc|
+      o.puts "#include \"#{inc}\""
+    }
+
+    o.puts
+    o.puts 'char * numstring[] = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "10" };'
+    o.puts
+
+    # Define the options allowed by each command
+    o.puts '// For each option, list the commands which accept it'
+    optarr.each { |optname|
+
+      o.print "int option_#{optname}[] = {"
+      c = 1
+      comma = ""
+
+      @commands.each { |command|
+        command.options.each { |allowed|
+          if (optname == allowed.name)
+            o.print "#{comma} #{c}"
+            comma = ","
+          end
+        }
+        c = c + 1
+      }
+      o.puts " };"
+    }
+    o.puts
+
+    o.puts 'int optgen_parse(int argc, char * argv[], int * command, char * options[])'
+    o.puts '{'
+    o.puts '  int i;'
+    o.puts '  int pos;'
+    o.puts
+    o.puts '  *command = OPTGEN_NO_COMMAND;'
+    o.puts
+    o.puts '  for (i = 0; i < COUNT_OPTIONS; i++) {'
+    o.puts '    options[i] = NULL;'
+    o.puts '  }'
+    o.puts
+    o.puts '  if (argc < 2) {'
+    o.puts '    return OPTGEN_NONE;'
+    o.puts '  }'
+    o.puts
+    o.puts '  // Check if the first argument is a recognized command'
+    o.puts '  int l = strlen(argv[1]);'
+    o.puts
+
+    # Go through commands to see if user gave a known one
+    command_num = 1
+    @commands.each { |command|
+      next if command.name == "GLOBAL"
+      len = command.name.length
+      o.puts "  if (l == #{len} && !strncmp(\"#{command.name}\", argv[1], #{len})) {"
+      o.puts "    *command = #{command_num};"
+      o.puts '    goto OPTS;'
+      o.puts '  }'
+      command_num = command_num + 1
+    }
+
+    if (@require_command)
+      o.puts
+      o.puts '  // A command is required but none found'
+      o.puts '  if (*command == OPTGEN_NO_COMMAND) {'
+      o.puts '    printf("error: Command required but none given\n");'
+      o.puts '    exit(1);'
+      o.puts '  }'
+    end
+
+    # Go through all remaining options
+    o.puts
+    o.puts ' OPTS:'
+    o.puts
+    o.puts '  pos = *command == OPTGEN_NO_COMMAND ? 1 : 2;'
+    o.puts
+    o.puts '  while (pos < argc) {'
+    o.puts '    l = strlen(argv[pos]);'
+    o.puts
+
+    n = 0
+    optarr.each { |i|
+      op = @options[i]
+      sa = nil
+      sa = "-#{op.shortarg}" if (op.shortarg)
+      sal = sa.length if sa
+      la = "--#{op.longarg}"
+      lal = la.length
+
+      o.print "    if ((l == #{lal} && !strncmp(\"#{la}\", argv[pos], #{lal}))"
+      if (sa == nil)
+        o.puts ') {'
+      else
+        o.puts '||'
+        o.puts "        (l == #{sal} && !strncmp(\"#{sa}\", argv[pos], #{sal}))) {"
+      end
+
+      if (op.paramlist != nil)
+        o.puts '      if (argv[pos+1] == NULL) {'
+        o.puts "        printf(\"error: no value for arg #{la}\\n\");"
+        o.puts '        exit(1);'
+        o.puts '      }'
+
+        if (op.paramlist[0] == 'ABSPATH')
+          o.puts '      // ABSPATH: Must start with /'
+          o.puts "      if (argv[pos+1][0] != '/') {"
+          o.puts "        printf(\"error: #{la} must be an absolute path\\n\");"
+          o.puts '        exit(1);'
+          o.puts '      }'
+        elsif (op.paramlist[0] == 'CHAR')
+          o.puts '      // CHAR: Must be a single character'
+          o.puts "      if (strlen(argv[pos+1]) != 1) {"
+          o.puts "        printf(\"error: #{la} must be a single character\\n\");"
+          o.puts '        exit(1);'
+          o.puts '      }'
+        end
+
+        o.puts "      options[#{n}] = argv[pos+1];"
+        o.puts '      pos += 2;'
+      else
+        o.puts "      if (options[#{n}] == NULL) {"
+        o.puts "        options[#{n}] = numstring[0];"
+        o.puts '      } else {'
+        o.puts "        options[#{n}] = numstring[atoi(options[#{n}])];"
+        o.puts '      }'
+        o.puts '      pos++;'
+      end
+
+      if (@strict_options)
+        o.puts "      // strict_options: is #{optarr[n]} allowed?"
+        name = optarr[n]
+
+        o.puts '      int ok = 0;'
+        o.puts '      unsigned int cc;'
+        o.puts "      unsigned int len = sizeof(option_#{name}) / sizeof(option_#{name})[0];"
+        o.puts '      for (cc = 0; cc < len; cc++) {'
+        o.puts "        if (option_#{name}[cc] == *command) { ok = 1; }"
+        o.puts "        if (option_#{name}[cc] == COMMAND_GLOBAL) { ok = 1; }"
+        o.puts '      }'
+
+        o.puts '      if (!ok) {'
+        o.puts "        printf(\"error: option '#{name}' not compatible with given command\\n\");"
+        o.puts '        exit(1);'
+        o.puts '      }'
+      end
+
+      if (op.callback != nil && op.callback != "")
+        o.puts '      // callback configured for this option'
+        o.puts "      int rv = #{op.callback}(options[#{n}], *command);"
+        o.puts '      if (rv != OPTGEN_CALLBACK_OK) {'
+        o.puts "        printf(\"error: problem handling option '#{name}'\\n\");"
+        o.puts '        exit(1);'
+        o.puts '      }'
+        o.puts
+      end
+
+      o.puts '      continue;'
+      o.puts '    }'
+
+      n = n + 1
+    }
+
+    o.puts
+    o.puts '    printf("error: unknown argument: [%s]\n", argv[pos]);'
+    o.puts '    exit(1);'
+    o.puts '  }'
+    o.puts
+
+    o.puts '  return OPTGEN_OK;'
+    o.puts '}'
+    o.puts
+
+    o.puts 'int opt_count(char * str)'
+    o.puts '{'
+    o.puts '  if (str == NULL) {'
+    o.puts '    return 0;'
+    o.puts '  } else {'
+    o.puts '    return atoi(str);'
+    o.puts '  }'
+    o.puts '}'
+    o.puts
+
+    o.puts 'int opt_int(char * str, int def)'
+    o.puts '{'
+    o.puts '  if (str == NULL) {'
+    o.puts '    return def;'
+    o.puts '  } else {'
+    o.puts '    return atoi(str);'
+    o.puts '  }'
+    o.puts '}'
+    o.puts
+
+    o.puts 'char opt_char(char * str, char def)'
+    o.puts '{'
+    o.puts '  if (str == NULL) {'
+    o.puts '    return def;'
+    o.puts '  } else {'
+    o.puts '    return str[0];'
+    o.puts '  }'
+    o.puts '}'
+    o.puts
+
+    o.puts 'void opt_show_help()'
+    o.puts '{'
+
+    @commands.each { |command|
+      next if (command.name == "GLOBAL")
+
+      line = command.name
+      line = line + " " * (2 + @longest_command - command.name.length)
+      line = line + command.description
+      o.puts "  printf(\"#{line}\\n\");"
+
+      command.options.each { |opt|
+        line = optline(opt, command.longest_option)
+        o.puts "  printf(\"#{line}\\n\");"
+      }
+      o.puts '  printf("\n");'
+    }
+
+    if (global != nil)
+      o.puts '  printf("General options:\n");'
+      global.options.each { |opt|
+        line = optline(opt, global.longest_option)
+        o.puts "  printf(\"#{line}\\n\");"
+      }
+    end
+    o.puts '  printf("\n");'
+    o.puts '}'
+
+    o.close()
+  end
+
+  #---------------------------------------------------------------------------
+  # Generate doc line for one option
+  #
+  def optline(opt, longest)
+    line = "  "
+    if (opt.shortarg != nil && opt.shortarg != "")
+      line = line + "-#{opt.shortarg} "
+    else
+      line = line + "   "
+    end
+    line = line + "--#{opt.longarg} "
+    if (opt.paramlist != nil)
+      opt.paramlist.each { |value|
+        line = line + "#{value} "
+      }
+    end
+    line = line + " " * (7 + longest - line.length)
+    line = line + opt.description
+
+    line
+  end
+
+end
+
+
+#-----------------------------------------------------------------------------
+# main
+#
+genfile = ARGV.shift
+if (!genfile)
+  puts "error: no optgen file!"
+  exit(1)
+end
+
+optgen = OptGen.new(genfile)
+
+optgen.gen_C()
