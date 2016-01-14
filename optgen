@@ -27,8 +27,8 @@ $VERSION = '0.2'
 #
 class OneOption
 
-  # is true if this option is required
-  attr_reader :required
+  # type of option (required, optional, hidden)
+  attr_reader :option_type
 
   # the name of this option (normalized from longarg)
   attr_reader :name
@@ -67,7 +67,19 @@ class OneOption
     end
 
     line =~ /(.):(.*):(.*):(.*):(.*)/;
-    @required = ($1 == "R")
+
+    case $1
+    when "R"
+      @option_type = "required"
+    when "O"
+      @option_type = "optional"
+    when "H"
+      @option_type = "hidden"
+    else
+      puts "error: option type '#{$1}' unknown"
+      exit(1)
+    end
+
     arglist = $2
     params = $3
     @callback = $4
@@ -627,8 +639,10 @@ ENDHEADER
       o.puts "  printf(\"#{line}\\n\");"
 
       command.options.each { |opt|
-        line = optline(opt, command.longest_option)
-        o.puts "  printf(\"#{line}\\n\");"
+        if (opt.option_type != "hidden")
+          line = optline(opt, command.longest_option)
+          o.puts "  printf(\"#{line}\\n\");"
+        end
       }
       o.puts '  printf("\n");'
     }
@@ -636,8 +650,10 @@ ENDHEADER
     if (global != nil)
       o.puts '  printf("General options:\n");'
       global.options.each { |opt|
-        line = optline(opt, global.longest_option)
-        o.puts "  printf(\"#{line}\\n\");"
+        if (opt.option_type != "hidden")
+          line = optline(opt, global.longest_option)
+          o.puts "  printf(\"#{line}\\n\");"
+        end
       }
     end
     o.puts '  printf("\n");'
