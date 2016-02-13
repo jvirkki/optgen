@@ -8,6 +8,13 @@ I find that option parsing routines such as getopt(1) are cumbersome
 and don't save that much work. optgen takes a slightly different
 approach. It generates a parser function based on a config file.
 
+Installing optgen
+-----------------
+optgen is available as a gem. If you are not going to hack on optgen
+itself and only want to use it, this is the easiest way to get the
+latest release.
+
+% sudo gem install optgen
 
 Running optgen
 --------------
