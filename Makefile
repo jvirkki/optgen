@@ -1,5 +1,5 @@
 #
-#  Copyright 2015 Jyri J. Virkki <jyri@virkki.com>
+#  Copyright 2015-2016 Jyri J. Virkki <jyri@virkki.com>
 #
 #  This file is part of optgen.
 #
@@ -17,5 +17,20 @@
 #  along with optgen.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+GEM=gem
+
 tests:
+	(cd bin && cp optgen-src optgen)
 	cd test && $(MAKE)
+
+build: clean tests
+	$(GEM) build optgen.gemspec
+
+install: clean build
+	$(GEM) install ./optgen-*.gem
+
+publish: clean build
+	$(GEM) push ./optgen-*.gem
+
+clean:
+	rm -f optgen-*.gem

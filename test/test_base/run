@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #
-#  Copyright 2015 Jyri J. Virkki <jyri@virkki.com>
+#  Copyright 2015-2016 Jyri J. Virkki <jyri@virkki.com>
 #
 #  This file is part of optgen.
 #
@@ -37,7 +37,7 @@ check_out () {
 
 rm -f optgen.c optgen.h main out
 
-../../optgen base.conf
+../../bin/optgen base.conf
 cc main.c optgen.c -o main
 
 # test: run app with no args

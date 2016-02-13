@@ -1,7 +1,7 @@
 #!/usr/bin/env perl
 
 #
-#  Copyright 2015 Jyri J. Virkki <jyri@virkki.com>
+#  Copyright 2015-2016 Jyri J. Virkki <jyri@virkki.com>
 #
 #  This file is part of optgen.
 #
@@ -19,7 +19,7 @@
 #  along with optgen.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-$CMD = '../../optgen';
+$CMD = '../../bin/optgen';
 $HERE = `basename \`pwd\``;
 chomp($HERE);
 
