@@ -23,6 +23,7 @@
 Gem::Specification.new do |s|
 
   version = `cat version`
+  version.chomp!
 
   src = File.open('bin/optgen-src', 'r')
   out = File.open('bin/optgen', 'w')
