@@ -33,4 +33,4 @@ publish: clean build
 	$(GEM) push ./optgen-*.gem
 
 clean:
-	rm -f optgen-*.gem
+	rm -f optgen-*.gem bin/optgen
