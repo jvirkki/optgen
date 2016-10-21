@@ -194,7 +194,8 @@ class OptGen
       line.chomp!
       line.strip!
       next if (line == "")
-      # depending on the ruby version, char from string may return a char or an int... sigh...
+      # depending on the ruby version, char from string may return
+      # a char or an int... sigh...
       next if (line[0] == '#' || line[0] == 35)
 
       if (line[0] == '[' || line[0] == 91)
@@ -313,6 +314,22 @@ ENDHEADER
     o.puts "#define OPTGEN_H"
     o.puts
     o.puts "#include <stdlib.h>"
+    o.puts
+
+    # Print info about which option letters are not taken
+    alphanum = ('a'..'z').to_a + ('A'..'Z').to_a + ('0'..'9').to_a
+    o.puts "//"
+    o.puts "// The following short options are NOT yet taken:"
+    o.print "// "
+    alphanum.each { |c|
+      if (@allargs[c])
+        o.print "."
+      else
+        o.print "#{c}"
+      end
+    }
+    o.puts
+    o.puts "//"
     o.puts
 
     # Define constants OPT_* for each known option
