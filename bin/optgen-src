@@ -441,6 +441,21 @@ ENDHEADER
     o.puts
 
     o.puts '/**'
+    o.puts ' * Convenience function to string value of an option'
+    o.puts ' *'
+    o.puts ' * Parameters:'
+    o.puts ' *   str - A value from options array'
+    o.puts ' *   def - Default value if none given'
+    o.puts ' *'
+    o.puts ' * Return:'
+    o.puts ' *'
+    o.puts ' *   Value of option as char *. If NULL, returns default def.'
+    o.puts ' *'
+    o.puts ' */'
+    o.puts 'char * opt_string(char * str, char * def);'
+    o.puts
+
+    o.puts '/**'
     o.puts ' * Show help based on command and option descriptions.'
     o.puts ' *'
     o.puts ' */'
@@ -666,6 +681,16 @@ ENDHEADER
     o.puts '    return def;'
     o.puts '  } else {'
     o.puts '    return str[0];'
+    o.puts '  }'
+    o.puts '}'
+    o.puts
+
+    o.puts 'char * opt_string(char * str, char * def)'
+    o.puts '{'
+    o.puts '  if (str == NULL) {'
+    o.puts '    return def;'
+    o.puts '  } else {'
+    o.puts '    return str;'
     o.puts '  }'
     o.puts '}'
     o.puts
