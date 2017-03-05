@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 
 #
-#  Copyright 2015-2016 Jyri J. Virkki <jyri@virkki.com>
+#  Copyright 2015-2017 Jyri J. Virkki <jyri@virkki.com>
 #
 #  This file is part of optgen.
 #
@@ -489,7 +489,11 @@ ENDHEADER
     o.puts
     o.puts '// LCOV_EXCL_START'
     o.puts
-    o.puts 'char * numstring[] = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "10" };'
+    o.print 'char * numstring[] = { '
+    1.upto(50) {|n|
+      o.print "\"#{n}\","
+    }
+    o.puts ' "X" };'
     o.puts
 
     # Define the options allowed by each command
@@ -607,6 +611,10 @@ ENDHEADER
         o.puts "        options[#{n}] = numstring[0];"
         o.puts '      } else {'
         o.puts "        options[#{n}] = numstring[atoi(options[#{n}])];"
+        o.puts "        if (!strcmp(options[#{n}], \"X\")) {"
+        o.puts "          printf(\"error: option %s repeated too many times!\\n\", argv[pos]);"
+        o.puts '          exit(1);'
+        o.puts '        }'
         o.puts '      }'
         o.puts '      pos++;'
       end
