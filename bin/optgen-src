@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 
 #
-#  Copyright 2015-2017 Jyri J. Virkki <jyri@virkki.com>
+#  Copyright 2015-2018 Jyri J. Virkki <jyri@virkki.com>
 #
 #  This file is part of optgen.
 #
@@ -135,6 +135,9 @@ class Command
   # name of the command as given in the config file
   attr_reader :name
 
+  # true if this is a hidden command
+  attr_reader :hidden
+
   # human readable description as given in the config file
   attr_reader :description
 
@@ -153,6 +156,10 @@ class Command
     @description = $2.strip if ($2)
     @options = Array.new()
     @longest_option = 0
+    if (@name[0..1] == "H:")
+      @hidden = true
+      @name = @name[2..-1]
+    end
   end
 
   #---------------------------------------------------------------------------
@@ -708,6 +715,7 @@ ENDHEADER
 
     @commands.each { |command|
       next if (command.name == "GLOBAL")
+      next if (command.hidden)
 
       line = command.name
       line = line + " " * (2 + @longest_command - command.name.length)

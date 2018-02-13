@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #
-#  Copyright 2015-2016 Jyri J. Virkki <jyri@virkki.com>
+#  Copyright 2015-2018 Jyri J. Virkki <jyri@virkki.com>
 #
 #  This file is part of optgen.
 #
@@ -107,6 +107,12 @@ set +e
 ./main two --path tmp > out
 set -e
 check_out 'error: --path must be an absolute path' 'main two --path tmp'
+
+# test: invoke hidden command
+set +e
+./main testing > out
+set -e
+check_out 'testing' 'hidden command'
 
 rm -f optgen.c optgen.h main out
 

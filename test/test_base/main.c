@@ -1,5 +1,5 @@
 /*
- *  Copyright 2015 Jyri J. Virkki <jyri@virkki.com>
+ *  Copyright 2015-2018 Jyri J. Virkki <jyri@virkki.com>
  *
  *  This file is part of optgen.
  *
@@ -96,6 +96,11 @@ int main(int argc, char * argv[])
       exit(0);
     }
 
+  }
+
+  if (command == COMMAND_testing) {
+    printf("testing\n");
+    exit(0);
   }
 
   printf("no known test\n");
