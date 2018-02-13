@@ -79,6 +79,12 @@ Example:
 The exception is the reserved name GLOBAL. This section (if present) defines
 options which are not specific to any command.
 
+If the command name is prefixed with "H:" it is a hidden command.
+The only difference is that it will not be documented in the help output.
+
+Example:
+[H:testing] Internal testing use only, not documented.
+
 Options
 -------
 Options for a command are listed after the command line.
